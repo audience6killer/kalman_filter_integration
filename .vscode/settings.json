@@ -1,0 +1,15 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/home/vill4in/esp/v5.1.4/esp-idf",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ],
+    "idf.port": "/dev/ttyS0",
+    "idf.toolsPath": "/home/vill4in/.espressif",
+    "editor.wordWrap": "on",
+    "files.associations": {
+        "*.ejs": "html",
+        "regex": "cpp"
+    }
+}
