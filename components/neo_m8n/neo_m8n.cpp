@@ -77,6 +77,12 @@ void neo_m8n_set_origin(float lat, float lon, float alt)
     g_origin_set = true;
 }
 
+
+QueueHandle_t neo_m8n_get_queue(void)
+{
+    return g_gps_queue_handle;
+}
+
 static void neo_m8n_task(void *pvParamenter)
 {
     ESP_LOGI(TAG, "Iniatilizing task");
@@ -90,6 +96,7 @@ static void neo_m8n_task(void *pvParamenter)
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .rx_flow_ctrl_thresh = 0,
+        .source_clk = UART_SCLK_APB,
     };
 
     // Configure UART parameters

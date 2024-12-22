@@ -1,0 +1,93 @@
+
+#include "kalman_filter.h"
+
+#define OMEGA_E     0.01f
+#define R_e         0.0f
+#define R_n         0.0f
+#define G           0.0f
+
+Nav_EKF::Nav_EKF() : ekf(15, 15),
+    F_n(15, 15)
+{
+    
+}
+
+void Nav_EKF::LinearizeFG(dspm::Mat &x, float *u)
+{
+    float lat = 0.0f;
+    float lon = 0.0f;
+    float h = 0.0f;
+    float v_n = 0.0f;
+    float v_e = 0.0f;
+    float v_d = 0.0f;
+    float f_n = 0.0f;
+    float f_e = 0.0f;
+    float f_d = 0.0f;
+    float beta = 0.0f;
+
+    // Initializate the process matrix with zeros
+    this->F.Copy(0.0f * dspm::Mat::ones(15, 15), 0, 0);
+
+    // First row
+    F(0, 1) = -OMEGA_E * sinf(lat) - (v_e*tan(lat))/(R_e + h);
+    F(0, 2) = v_n/(R_n + h); 
+    F(0, 3) = 0.0f;
+    F(0, 4) = 1/(R_e + h);
+    F(0, 6) = -v_e/powf(R_e + h, 2) - OMEGA_E*sin(lat);
+    F(0, 12) = -1.0f;
+    // Second row
+    F(1, 0) = OMEGA_E*sin(lat) + (v_e*tan(lat))/(R_e + h);
+    F(1, 2) = v_e/(R_e + h) + OMEGA_E*cos(lat);
+    F(1, 3) = -1/(R_n + h);
+    F(1, 8) = v_n/powf((R_e + h),2);
+    F(1, 13) = -1.0f;
+    // Third row
+    F(2, 0) = -v_n/(R_n + h);
+    F(2, 1) = - v_e/(R_e + h) - OMEGA_E*cos(lat);
+    F(2, 4) = -tan(lat)/(R_e + h);
+    F(2, 6) = - OMEGA_E*cos(lat) - v_e/(powf(cosf(lat), 2)*(R_e + h));
+    F(2, 8) = (v_e*tan(lat))/powf((R_e + h), 2);
+    F(2, 14) = -1.0f;
+    // Forth row
+    F(3, 1) = -f_d;
+    F(3, 2) = f_e;
+    F(3, 3) = v_d/(R_n + h);
+    F(3, 4) = -2*sin(lat)*(OMEGA_E + v_e/(cos(lat)*(R_e + h)));
+    F(3, 5) = v_n/(R_n + h);
+    F(3, 6) = -2*OMEGA_E*v_e*cosf(lat) - powf(v_e,2)/(powf(cosf(lat),2)*(R_e + h));
+    F(3, 8) = (powf(v_e, 2)*tanf(lat))/powf(R_e + h, 2) - (v_d*v_n)/powf(R_n + h, 2);
+    F(3, 9) = 1.0f;
+    // Fifth row
+    F(4, 0) = f_d;  
+    F(4, 2) = -f_n;
+    F(4, 3) = (v_e + tan(lat))/(R_e + h) + 2*OMEGA_E*sin(lat);
+    F(4, 4) = (v_d + v_n*tan(lat))/(R_e + h);
+    F(4, 5) = v_e/(R_e + h) + 2*OMEGA_E*cos(lat);
+    F(4, 6) = 2*OMEGA_E*(v_n*cos(lat) - v_d*sin(lat)) + (v_e*v_n)/(powf(cos(lat), 2)*(R_e + h));   
+    F(4, 8) = -(v_e*(v_d + v_n*tan(lat)))/powf(R_e + h, 2);
+    F(4, 10) = 1.0f;
+    // Sixth row
+    F(5, 0) = -f_e;
+    F(5, 1) = f_n;
+    F(5, 3) = -(2*v_n)/(R_n + h);
+    F(5, 4) = - (2*v_e)/(R_e + h) - 2*OMEGA_E*cos(lat);
+    F(5, 6) = 2*OMEGA_E*v_e*sin(lat);
+    F(5, 8) = powf(v_e, 2)/powf(R_e + h, 2) - (2*G)/(R_n + h) + powf(v_n, 2)/powf(R_n + h, 2);
+    F(5, 11) = 1.0f;
+    // Seventh row
+    F(6, 3) = 1/(R_n + h);
+    F(6, 8) = -v_n/pow(R_n + h, 2);
+
+    // Eight row
+    F(7, 4) = 1/(cos(lat)*(R_e + h));
+    F(7, 6) = (v_e*sin(lat))/(powf(cos(lat), 2)*(R_e + h));
+    F(7, 8) = -(v_e*cos(lat))/(R_e + h);
+
+    // Ninth row
+    F(8, 5) = -1.0f; 
+
+    F(12, 12) = -beta; 
+    F(13, 13) = -beta; 
+    F(14, 14) = -beta; 
+
+}
