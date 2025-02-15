@@ -11,4 +11,12 @@
 
 #define BNO085_SAMPLE_TIME      10  // ms
 
+// HOME
+#define INIT_LAT             19.5037727355
+#define INIT_LON             -99.1248474121
+#define INIT_ALT             2331.8000488
+
+#define R_n                     6378137.0f
+#define R_e                     6356752.3142f
+
 #endif

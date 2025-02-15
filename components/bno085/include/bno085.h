@@ -8,14 +8,14 @@ extern "C"
     typedef struct
     {
         float integral;
-        float prev_value;
+        float prev_val;
     } integrator_t;
 
     typedef struct
     {
-        integrator_t north;   // North
-        integrator_t east;    // East
-        integrator_t down;    // Down
+        integrator_t lat;
+        integrator_t lon;
+        integrator_t alt;
         integrator_t north_p; // North
         integrator_t east_p;  // East
         integrator_t down_p;  // Down
@@ -23,6 +23,18 @@ extern "C"
         float pitch;
         float yaw;
     } state_vector_t;
+
+    typedef enum
+    {
+        BNO085_OK = 0,
+        BNO085_STOPPED,
+        BNO085_RESET,
+
+    } bno085_state_t;
+
+    esp_err_t bno085_get_queue_handle(QueueHandle_t *queue);
+
+    bno085_state_t bno085_get_state(void);
 
     void bno085_start_task(void);
 

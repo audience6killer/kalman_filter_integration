@@ -10,13 +10,13 @@ public:
     virtual ~Nav_EKF();
     virtual void Init();
 
+    dspm::Mat h_gps_only;
+    dspm::Mat h_odometry_only;
+    dspm::Mat h_full_measure;
+
     virtual dspm::Mat StateXdot(dspm::Mat &x, float *u);
     virtual void LinearizeFG(dspm::Mat &x, float *u);
 
-    /**
-     * Non-linearized system matrice F, where xDot[n] = F*x[n] + G*u + W
-    */
-    dspm::Mat F_n;
-}
+};
 
 #endif
