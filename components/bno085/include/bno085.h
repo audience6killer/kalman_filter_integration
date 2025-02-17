@@ -8,17 +8,17 @@ extern "C"
     typedef struct
     {
         float integral;
-        float prev_val;
+        float prev_diff_val;
     } integrator_t;
 
     typedef struct
     {
-        integrator_t lat;
-        integrator_t lon;
+        integrator_t lat; // In degrees
+        integrator_t lon; // In degrees
         integrator_t alt;
-        integrator_t north_p; // North
-        integrator_t east_p;  // East
-        integrator_t down_p;  // Down
+        integrator_t vn; // North
+        integrator_t ve;  // East
+        integrator_t vd;  // Down
         float roll;
         float pitch;
         float yaw;
