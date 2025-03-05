@@ -6,6 +6,14 @@ extern "C"
 {
 #endif
 
+    typedef struct
+    {
+        double lat;
+        double lon;
+        double alt;
+        double hdop;
+    } gps_coords_t;
+
     QueueHandle_t neo_m8n_get_queue(void);
     /**
      * @brief Latitude and longitude must be in radians and alt in meters
