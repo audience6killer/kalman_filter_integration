@@ -12,5 +12,7 @@
         "*.ejs": "html",
         "regex": "cpp"
     },
-    "idf.flashType": "UART"
+    "idf.flashType": "UART",
+    "workbench.editor.enablePreview": true,
+    "workbench.editor.revealIfOpen": true,
 }

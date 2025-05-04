@@ -29,8 +29,8 @@ static void test_bno085_task(void *pvParameters)
             if(xQueueReceive(queue, &state_vector, portMAX_DELAY) == pdTRUE)
             {
                 #if true 
-                //printf("Lat: %f, Lon: %f, Alt: %f\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral); 
-                printf("/*%f,%f,%f*/\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral); 
+                printf("Lat: %f, Lon: %f, Alt: %f\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral); 
+                //printf("/*%f,%f,%f*/\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral); 
                 #endif
                 //continue;
             }

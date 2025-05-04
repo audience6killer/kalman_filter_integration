@@ -29,7 +29,6 @@ extern "C"
         BNO085_OK = 0,
         BNO085_STOPPED,
         BNO085_RESET,
-
     } bno085_state_t;
 
     esp_err_t bno085_get_queue_handle(QueueHandle_t *queue);

@@ -10,9 +10,9 @@ extern "C" void app_main(void)
 {
     initArduino();
 
-    //test_bno085_task_start();
+    test_bno085_task_start();
 
-    test_neo_m8n_task_start();
+    //test_neo_m8n_task_start();
 
     while(true)
     {
