@@ -1,5 +1,5 @@
-#ifndef BNO085_H
-#define BNO085_H
+#ifndef imu_H
+#define imu_H
 #ifdef __cplusplus
 extern "C"
 {
@@ -10,6 +10,13 @@ extern "C"
         float integral;
         float prev_diff_val;
     } integrator_t;
+
+    typedef struct 
+    {
+        float lat;
+        float lon;
+        float alt;
+    } geodesic_point_t;
 
     typedef struct
     {
@@ -26,16 +33,35 @@ extern "C"
 
     typedef enum
     {
-        BNO085_OK = 0,
-        BNO085_STOPPED,
-        BNO085_RESET,
-    } bno085_state_t;
+        IMU_OK = BIT0,
+        IMU_STARTED = BIT1,
+        IMU_STOPPED = BIT2,
+        IMU_RESET = BIT3,
+        IMU_ERROR = BIT4,
+    } imu_state_e;
 
-    esp_err_t bno085_get_queue_handle(QueueHandle_t *queue);
+    typedef enum 
+    {
+        IMU_ERR_I2C_ERROR = BIT0,
+        IMU_ERR_ORIGIN_NOT_SET = BIT1,
+    } imu_err_e;
 
-    bno085_state_t bno085_get_state(void);
+    typedef enum {
+        IMU_CMD_START = 0,
+        IMU_CMD_STOP,
+        IMU_CMD_SET_ORIGIN,
+    } imu_cmd_e;
 
-    void bno085_start_task(void);
+    typedef struct {
+        imu_cmd_e cmd;
+        geodesic_point_t *origin;
+    } imu_cmd_t;
+
+    esp_err_t imu_get_data_queue_handle(QueueHandle_t *queue);
+
+    esp_err_t imu_get_cmd_queue_handle(QueueHandle_t *queue);
+
+    void imu_start_task(void);
 
 #ifdef __cplusplus
 }

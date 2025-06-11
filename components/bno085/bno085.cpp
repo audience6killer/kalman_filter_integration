@@ -18,20 +18,23 @@ extern "C"
 
 // #define MAP_ANGLE(angle) (angle < 0 ? 2 * PI + angle : angle)
 
-typedef enum {
-	BNO085_ORI_BIT = 0,
-	BNO085_ACCEL_BIT,
+typedef enum
+{
+	IMU_ORI_BIT = 0,
+	IMU_ACCEL_BIT,
 } bno85_data_source_e;
 
-static const char TAG[] = "BNO085";
+static const char TAG[] = "imu";
 
-static bno085_state_t g_bno085_state = BNO085_STOPPED;
 static BNO08x g_IMU;
-static QueueHandle_t g_bn085_data_queue_handle = NULL;
-static QueueHandle_t g_bn085_cmd_queue_handle = NULL;
+static QueueHandle_t g_imu_data_queue_handle = NULL;
+static QueueHandle_t g_imu_cmd_queue_handle = NULL;
+static imu_state_e g_imu_state = IMU_STOPPED;
 static state_vector_t g_state_vector;
-static byte g_reading_flag = 0x0;
-static esp_timer_handle_t g_state_loop_timer;
+static EventGroupHandle_t g_event_group;
+static EventGroupHandle_t g_error_group;
+static byte g_reading_flag = 0;
+static bool g_origin_is_set = false;
 
 typedef struct
 {
@@ -46,7 +49,7 @@ static accel_data_t g_imu_data = {
 	.accz = 0.0f,
 };
 
-void bno085_init_integrator(state_vector_t &pose)
+void imu_init_integrator(state_vector_t &pose)
 {
 	pose.lat.integral = 0.0f;
 	pose.lon.integral = 0.0f;
@@ -62,30 +65,13 @@ void bno085_init_integrator(state_vector_t &pose)
 	pose.vd.prev_diff_val = 0.0f;
 }
 
-void bno085_set_state(bno085_state_t state)
+void imu_set_state(imu_state_e state)
 {
-	char state_str[10];
-	switch (state)
-	{
-	case BNO085_OK:
-		strcpy(state_str, "OK");
-		break;
-	case BNO085_STOPPED:
-		strcpy(state_str, "STOPPED");
-		break;
-	case BNO085_RESET:
-		strcpy(state_str, "RESET");
-		break;
-	default:
-		strcpy(state_str, "UNKNOWN");
-		break;
-	}
-
-	ESP_LOGI(TAG, "Setting state to %s", state_str);
-	g_bno085_state = state;
+	xEventGroupSetBits(g_event_group, state);
+	g_imu_state = state;
 }
 
-static void bno085_update_pose(void *args)
+static void imu_update_pose(void *args)
 {
 	// Specific force to local geographic reference, angles must be in radians?
 	static int64_t prev_time = 0;
@@ -129,29 +115,21 @@ static void bno085_update_pose(void *args)
 	g_state_vector.lon.prev_diff_val = lon_dot;
 	g_state_vector.alt.integral += delta_time * 0.5f * (g_state_vector.alt.prev_diff_val + alt_dot);
 
-	if (xQueueSend(g_bn085_data_queue_handle, &g_state_vector, pdMS_TO_TICKS(100)) != pdPASS)
+	if (xQueueSend(g_imu_data_queue_handle, &g_state_vector, pdMS_TO_TICKS(100)) != pdPASS)
 	{
 		ESP_LOGE(TAG, "Error sending to queue");
 	}
 }
 
-esp_err_t bno085_config_reports(void)
+void imu_config_reports(void)
 {
-	// while (g_IMU.enableAccelerometer() != true)
-	//{
-	//	ESP_LOGE(TAG, "Accel could not be enabled. Retrying...");
-	//	vTaskDelay(pdMS_TO_TICKS(500));
-	// }
-	// ESP_LOGI(TAG, "Accel enabled");
-	// ESP_LOGI(TAG, "Output in form x, y, z, in m/s2");
-
 	while (g_IMU.enableLinearAccelerometer() != true)
 	{
 		ESP_LOGE(TAG, "Linear Accel could not be enabled. Retrying...");
 		vTaskDelay(pdMS_TO_TICKS(500));
 	}
 	ESP_LOGI(TAG, "Linear Accel enabled");
-	ESP_LOGI(TAG, "Output in form x, y, z, in m/s2");
+	//ESP_LOGI(TAG, "Output in form x, y, z, in m/s2");
 
 	while (g_IMU.enableRotationVector() != true)
 	{
@@ -159,36 +137,40 @@ esp_err_t bno085_config_reports(void)
 		vTaskDelay(pdMS_TO_TICKS(500));
 	}
 	ESP_LOGI(TAG, "Rotation vector enabled");
-	ESP_LOGI(TAG, "Output in form x, y, z, in rad");
+	// ESP_LOGI(TAG, "Output in form x, y, z, in rad");
 
-	bno085_set_state(BNO085_OK);
+	imu_set_state(IMU_OK);
+}
+
+esp_err_t imu_get_cmd_queue_handle(QueueHandle_t *queue)
+{
+	ESP_RETURN_ON_FALSE(g_imu_cmd_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "CMD queue handle is NULL");
+
+	*queue = g_imu_cmd_queue_handle;
 
 	return ESP_OK;
 }
 
-bno085_state_t bno085_get_state(void)
+esp_err_t imu_get_data_queue_handle(QueueHandle_t *queue)
 {
-	return g_bno085_state;
-}
+	ESP_RETURN_ON_FALSE(g_imu_data_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "Data queue handle is NULL");
 
-esp_err_t bno085_get_queue_handle(QueueHandle_t *queue)
-{
-	ESP_RETURN_ON_FALSE(g_bn085_data_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "Queue handle is NULL");
-
-	*queue = g_bn085_data_queue_handle;
+	*queue = g_imu_data_queue_handle;
 
 	return ESP_OK;
 }
 
-void bno085_info_reader(void)
+void imu_info_reader(void)
 {
 	if (g_IMU.wasReset())
 	{
 		ESP_LOGE(TAG, "Sensor was reset");
 
-		bno085_set_state(BNO085_RESET);
+		imu_set_state(IMU_RESET);
 
-		ESP_ERROR_CHECK(bno085_config_reports());
+		imu_config_reports();
+
+		imu_set_state(IMU_STARTED);
 	}
 	if (g_IMU.getSensorEvent() == true)
 	{
@@ -199,7 +181,7 @@ void bno085_info_reader(void)
 			g_imu_data.accz = g_IMU.getLinAccelZ();
 			byte accel_acc = g_IMU.getAccelAccuracy();
 
-			g_reading_flag = g_reading_flag | 1 << BNO085_ACCEL_BIT;
+			g_reading_flag = g_reading_flag | 1 << IMU_ACCEL_BIT;
 
 			// printf("%f,%f,%f,%d\r\n", g_imu_data.accx, g_imu_data.accy, g_imu_data.accz, accel_acc);
 		}
@@ -209,54 +191,165 @@ void bno085_info_reader(void)
 			g_state_vector.pitch = g_IMU.getPitch();
 			g_state_vector.yaw = g_IMU.getYaw();
 
-			g_reading_flag = g_reading_flag | 1 << BNO085_ORI_BIT;
+			g_reading_flag = g_reading_flag | 1 << IMU_ORI_BIT;
 			// printf("/*rot,x,%f,y,%f,z,%f,calib,%d*/\r\n", RAD_TO_DEG * g_state_vector.roll, RAD_TO_DEG * g_state_vector.pitch, RAD_TO_DEG * g_state_vector.yaw, 0);
 		}
 
 		// Check if both readings have been received
-		if(g_reading_flag == 0b00000011)
+		if (g_reading_flag == 0b00000011)
 		{
-			bno085_update_pose(NULL);
+			imu_update_pose(NULL);
 			g_reading_flag = 0;
 		}
 	}
 }
 
-static void bno085_task(void *pvParamenters)
+/* Event handlers */
+esp_err_t imu_start_event_handler(void)
+{
+	if (g_imu_state == IMU_STARTED)
+	{
+		ESP_LOGW(TAG, "IMU process already started!");
+		return ESP_OK;
+	}
+
+	if (!g_origin_is_set)
+	{
+		ESP_LOGE(TAG, "Cannot start process without initializing the origin!");
+		xEventGroupSetBits(g_event_group, IMU_ERROR);
+		xEventGroupSetBits(g_error_group, IMU_ERR_ORIGIN_NOT_SET);
+		return ESP_FAIL;
+	}
+
+	imu_set_state(IMU_STARTED);
+
+	return ESP_OK;
+}
+
+esp_err_t imu_stop_event_handler(void)
+{
+	if (g_imu_state == IMU_STOPPED)
+	{
+		ESP_LOGW(TAG, "IMU process already stopped!");
+		return ESP_OK;
+	}
+	else if (g_imu_state != IMU_STARTED)
+	{
+		ESP_LOGW(TAG, "IMU process is not started!");
+		return ESP_OK;
+	}
+
+	imu_set_state(IMU_STOPPED);
+
+	return ESP_OK;
+}
+
+esp_err_t imu_set_origin_event_handler(geodesic_point_t *origin)
+{
+	ESP_RETURN_ON_FALSE(origin != NULL, ESP_ERR_INVALID_STATE, TAG, "Origin point is NULL");
+
+	if (g_imu_state == IMU_STARTED)
+	{
+		ESP_LOGE(TAG, "Setting new origin while process already started!");
+		return ESP_FAIL;
+	}
+
+	g_state_vector.alt.integral = origin->alt;
+	g_state_vector.lat.integral = origin->lat;
+	g_state_vector.lon.integral = origin->lon;
+
+	ESP_LOGI(TAG, "New origin set: Lat = %f, Lon = %f, Alt = %f",
+			 g_state_vector.lat.integral, g_state_vector.lon.integral, g_state_vector.alt.integral);
+	g_origin_is_set = true;
+
+	return ESP_OK;
+}
+
+void imu_cmd_handler(void)
+{
+	static imu_cmd_t cmd;
+
+	if (xQueueReceive(g_imu_cmd_queue_handle, &cmd, pdMS_TO_TICKS(10)) == pdPASS)
+	{
+		switch (cmd.cmd)
+		{
+		case IMU_CMD_START:
+			ESP_LOGI(TAG, "Event: Start process");
+			if (imu_start_event_handler() != ESP_OK)
+			{
+				ESP_LOGE(TAG, "Start event failed");
+			}
+			break;
+
+		case IMU_CMD_STOP:
+			ESP_LOGI(TAG, "Event: Stop process");
+			imu_stop_event_handler();
+			break;
+
+		case IMU_CMD_SET_ORIGIN:
+			ESP_LOGI(TAG, "Event: Set origin");
+			imu_set_origin_event_handler(cmd.origin);
+			break;
+
+		default:
+			ESP_LOGW(TAG, "Event: Unknown event");
+			break;
+		}
+	}
+}
+
+static void imu_task(void *pvParamenters)
 {
 	ESP_LOGI(TAG, "Initializing task");
 
-	g_bn085_data_queue_handle = xQueueCreate(5, sizeof(state_vector_t));
+	/* Create queues */
+	g_imu_data_queue_handle = xQueueCreate(5, sizeof(state_vector_t));
+	g_imu_cmd_queue_handle = xQueueCreate(5, sizeof(imu_cmd_t));
 
+	/* Create Event Groups */
+	g_event_group = xEventGroupCreate();
+	g_error_group = xEventGroupCreate();
+
+	/* Begin I2C communication */
 	Wire.begin();
 
-	while (g_IMU.begin(BNO085_ADDR, Wire, BNO085_INT, BNO085_RST) == false)
+	while (g_IMU.begin(IMU_ADDR, Wire, IMU_INT, IMU_RST) == false)
 	{
-		ESP_LOGE(TAG, "BNO085 not detected at default I2C address. Retrying..");
+		ESP_LOGE(TAG, "imu not detected at default I2C address. Retrying..");
+		xEventGroupSetBits(g_event_group, IMU_ERROR);
+		xEventGroupSetBits(g_error_group, IMU_ERR_I2C_ERROR);
 		vTaskDelay(pdMS_TO_TICKS(500));
 	}
 
-	ESP_ERROR_CHECK(bno085_config_reports());
+	imu_config_reports();
 
-	bno085_init_integrator(g_state_vector);
+	imu_init_integrator(g_state_vector);
 
 	// Iniatilize the state vector
-	g_state_vector.alt.integral = INIT_ALT;
-	g_state_vector.lat.integral = INIT_LAT;
-	g_state_vector.lon.integral = INIT_LON;
+	//g_state_vector.alt.integral = INIT_ALT;
+	//g_state_vector.lat.integral = INIT_LAT;
+	//g_state_vector.lon.integral = INIT_LON;
+
+	/* Notify parent end of initialization */
+	imu_set_state(IMU_OK);
 
 	for (;;)
 	{
-		bno085_info_reader();
+		if (g_imu_state == IMU_STARTED)
+		{
+			imu_info_reader();
+		}
+
+		imu_cmd_handler();
+
 		vTaskDelay(pdMS_TO_TICKS(10));
 	}
-
 }
 
-void bno085_start_task(void)
+void imu_start_task(void)
 {
 	ESP_LOGI(TAG, "Starting task");
 
-	xTaskCreatePinnedToCore(&bno085_task, "bno085", BNO085_STACK_SIZE,
-							NULL, BNO085_TASK_PRIORITY, NULL, BNO085_CORE_ID);
+	xTaskCreatePinnedToCore(&imu_task, "imu", IMU_STACK_SIZE,
+							NULL, IMU_TASK_PRIORITY, NULL, IMU_CORE_ID);
 }

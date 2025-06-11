@@ -15,10 +15,12 @@
 Nav_EKF::Nav_EKF() : ekf(15, 15),
                      h_full_measure(7, 15)
 {
+
 }
 
 Nav_EKF::~Nav_EKF()
 {
+
 }
 
 void Nav_EKF::Init()
