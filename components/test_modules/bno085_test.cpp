@@ -55,7 +55,7 @@ void test_get_imu_data(void)
         if (xQueueReceive(g_imu_data_handle, &state_vector, pdMS_TO_TICKS(100)) == pdTRUE)
         {
 #if true
-            printf("Lat: %f, Lon: %f, Alt: %f\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral);
+            printf("Lat: %f, Lon: %f, Alt: %f\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral);
 // printf("/*%f,%f,%f*/\r\n", state_vector.lat.integral, state_vector.lon.integral, state_vector.alt.integral);
 #endif
             // continue;

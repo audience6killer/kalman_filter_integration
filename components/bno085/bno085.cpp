@@ -71,7 +71,7 @@ void imu_set_state(imu_state_e state)
 	g_imu_state = state;
 }
 
-static void imu_update_pose(void *args)
+void imu_update_pose(void)
 {
 	// Specific force to local geographic reference, angles must be in radians?
 	static int64_t prev_time = 0;
@@ -82,6 +82,10 @@ static void imu_update_pose(void *args)
 	float fn = g_imu_data.accx - g_state_vector.yaw * g_imu_data.accy + g_state_vector.pitch * g_imu_data.accz;
 	float fe = g_state_vector.yaw * g_imu_data.accx + g_imu_data.accy - g_state_vector.roll * g_imu_data.accz;
 	float fd = -g_state_vector.pitch * g_imu_data.accx + g_state_vector.roll * g_imu_data.accy + g_imu_data.accz;
+
+	g_state_vector.fn = fn;
+	g_state_vector.fe = fe;
+	g_state_vector.fd = fd;
 
 	const float vn = g_state_vector.vn.integral;
 	const float ve = g_state_vector.ve.integral;
@@ -160,8 +164,9 @@ esp_err_t imu_get_data_queue_handle(QueueHandle_t *queue)
 	return ESP_OK;
 }
 
-void imu_info_reader(void)
+void imu_data_loop(void)
 {
+	/* Check if IMU was reset */
 	if (g_IMU.wasReset())
 	{
 		ESP_LOGE(TAG, "Sensor was reset");
@@ -172,6 +177,8 @@ void imu_info_reader(void)
 
 		imu_set_state(IMU_STARTED);
 	}
+
+	/* Get readings */
 	if (g_IMU.getSensorEvent() == true)
 	{
 		if (g_IMU.getSensorEventID() == SENSOR_REPORTID_LINEAR_ACCELERATION)
@@ -198,7 +205,7 @@ void imu_info_reader(void)
 		// Check if both readings have been received
 		if (g_reading_flag == 0b00000011)
 		{
-			imu_update_pose(NULL);
+			imu_update_pose();
 			g_reading_flag = 0;
 		}
 	}
@@ -313,7 +320,7 @@ static void imu_task(void *pvParamenters)
 	/* Begin I2C communication */
 	Wire.begin();
 
-	while (g_IMU.begin(IMU_ADDR, Wire, IMU_INT, IMU_RST) == false)
+	while (!g_IMU.begin(IMU_ADDR, Wire, IMU_INT, IMU_RST))
 	{
 		ESP_LOGE(TAG, "imu not detected at default I2C address. Retrying..");
 		xEventGroupSetBits(g_event_group, IMU_ERROR);
@@ -325,11 +332,6 @@ static void imu_task(void *pvParamenters)
 
 	imu_init_integrator(g_state_vector);
 
-	// Iniatilize the state vector
-	//g_state_vector.alt.integral = INIT_ALT;
-	//g_state_vector.lat.integral = INIT_LAT;
-	//g_state_vector.lon.integral = INIT_LON;
-
 	/* Notify parent end of initialization */
 	imu_set_state(IMU_OK);
 
@@ -337,12 +339,12 @@ static void imu_task(void *pvParamenters)
 	{
 		if (g_imu_state == IMU_STARTED)
 		{
-			imu_info_reader();
+			imu_data_loop();
 		}
 
 		imu_cmd_handler();
 
-		vTaskDelay(pdMS_TO_TICKS(10));
+		vTaskDelay(pdMS_TO_TICKS(1));
 	}
 }
 

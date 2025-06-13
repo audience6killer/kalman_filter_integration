@@ -11,10 +11,6 @@
 
 #define IMU_SAMPLE_TIME      10  // 100hz @ 10ms
 
-// HOME
-#define INIT_LAT             19.5037727355f
-#define INIT_LON             -99.1248474121f
-#define INIT_ALT             2331.8000488f
 
 #define R_n                     6378137.0f
 #define R_e                     6356752.3142f

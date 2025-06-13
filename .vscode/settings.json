@@ -5,7 +5,7 @@
         "interface/ftdi/esp32_devkitj_v1.cfg",
         "target/esp32.cfg"
     ],
-    "idf.port": "/dev/ttyUSB1",
+    "idf.port": "/dev/ttyUSB0",
     "idf.toolsPath": "/home/vill4in/.espressif",
     "editor.wordWrap": "on",
     "files.associations": {

@@ -6,27 +6,33 @@
 #define R_n 0.0f
 #define G_f 0.0f
 
-#define SIGMA_ANG  0.0037f // or 0.0012
-#define SIGMA_FX   0.0004316788375805062f
-#define SIGMA_FY   0.00036860956390441724f
-#define SIGMA_FZ   0.00044968152477711375f
-#define SIGMA_POS   SIGMA_FX + SIGMA_FY + SIGMA_FZ
+#define SIGMA_ANG 0.0037f // or 0.0012
+#define SIGMA_FX 0.0004316788375805062f
+#define SIGMA_FY 0.00036860956390441724f
+#define SIGMA_FZ 0.00044968152477711375f
+#define SIGMA_POS SIGMA_FX + SIGMA_FY + SIGMA_FZ
 
 Nav_EKF::Nav_EKF() : ekf(15, 15),
-                     h_full_measure(7, 15)
+                     h_full_measure(7, 15),
+                     nominal_sys(9, 1)
 {
-
 }
 
 Nav_EKF::~Nav_EKF()
 {
-
 }
 
 void Nav_EKF::Init()
 {
+    // Initialize the nominal system
+    for(size_t i = 0; i < 9; i++)
+    {
+        this->nominal_sys[i] = 0.0f;
+    }
+
     // G will be constant
-    this->G.Copy(dspm::Mat::eye(this->NUMX), 0, 0);
+    //this->G.Copy(dspm::Mat::eye(this->NUMX), 0, 0);
+    this->G *= 0.0f;
 
     this->Q.Copy(0.1f * dspm::Mat::eye(15), 0, 0);
 
@@ -51,21 +57,35 @@ void Nav_EKF::Init()
     // Initial state
     this->X *= 0.0f;
     this->P.Copy(0.001f * dspm::Mat::eye(this->NUMX), 0, 0);
-    
+}
+
+void Nav_EKF::Process(float *u, float dt)
+{
+    // ekf::Process(u, dt);
+    this->LinearizeFG(this->X, u);
+    this->RungeKutta(this->X, u, dt);
+    this->CovariancePrediction(dt);
+
+    this->X_corrected(0, 0) = nominal_sys[0] - this->X(6, 0);
+    this->X_corrected(1, 0) = nominal_sys[1] - this->X(7, 0);
+    this->X_corrected(2, 0) = nominal_sys[2] - this->X(8, 0);
+    this->X_corrected(3, 0) = nominal_sys[3] - this->X(3, 0);
+    this->X_corrected(4, 0) = nominal_sys[4] - this->X(4, 0);
+    this->X_corrected(5, 0) = nominal_sys[5] - this->X(5, 0);
 }
 
 void Nav_EKF::LinearizeFG(dspm::Mat &x, float *u)
 {
-    float lat = 0.0f;
-    float lon = 0.0f;
-    float h = 0.0f;
-    float v_n = 0.0f;
-    float v_e = 0.0f;
-    float v_d = 0.0f;
-    float f_n = 0.0f;
-    float f_e = 0.0f;
-    float f_d = 0.0f;
-    float beta = 0.0f;
+    /* The state vector is the SNIS error vector */
+    float lat = nominal_sys[0];
+    float lon = nominal_sys[1];
+    float h =   nominal_sys[2];
+    float v_n = nominal_sys[3];
+    float v_e = nominal_sys[4];
+    float v_d = nominal_sys[5];
+    float f_n = nominal_sys[6];
+    float f_e = nominal_sys[7];
+    float f_d = nominal_sys[8];
 
     // Initializate the process matrix with zeros
     this->F *= 0.0f;
@@ -128,7 +148,47 @@ void Nav_EKF::LinearizeFG(dspm::Mat &x, float *u)
     // Ninth row
     F(8, 5) = -1.0f;
 
-    F(12, 12) = -beta;
-    F(13, 13) = -beta;
-    F(14, 14) = -beta;
+    F(12, 12) = -this->X(9, 1);
+    F(13, 13) = -this->X(10, 1);
+    F(14, 14) = -this->X(11, 1);
+}
+
+dspm::Mat Nav_EKF::StateXdot(dspm::Mat &x, float *u)
+{
+    dspm::Mat Xdot = (this->F * x);
+
+    return Xdot;
+}
+
+void Nav_EKF::UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d)
+{
+    // printf("lat: %.6f, lon: %.6f, h: %.6f, v_n: %.6f, v_e: %.6f, v_d: %.6f, f_n: %.6f, f_e: %.6f, f_d: %.6f\n",
+    //    lat, lon, h, v_n, v_e, v_d, f_n, f_e, f_d);
+
+    this->nominal_sys[0] = lat;
+    this->nominal_sys[1] = lon;
+    this->nominal_sys[2] = h;
+    this->nominal_sys[3] = v_n;
+    this->nominal_sys[4] = v_e;
+    this->nominal_sys[5] = v_d;
+    this->nominal_sys[6] = f_n;
+    this->nominal_sys[7] = f_e;
+    this->nominal_sys[8] = f_d;
+
+    //printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys(0, 0), nominal_sys(1, 0),nominal_sys(2, 0),nominal_sys(3, 0),nominal_sys(4, 0),nominal_sys(5, 0),nominal_sys(6, 0),nominal_sys(7, 0),nominal_sys(8, 0));
+}
+
+//void Nav_EKF::UpdateNominalSystem(dspm::Mat state)
+//{
+//    this->nominal_sys.Copy(state, 0, 0);
+//    //printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys(0, 0), nominal_sys(1, 0),nominal_sys(2, 0),nominal_sys(3, 0),nominal_sys(4, 0),nominal_sys(5, 0),nominal_sys(6, 0),nominal_sys(7, 0),nominal_sys(8, 0));
+//}
+
+void Nav_EKF::PrintXState(void)
+{
+    // printf("[\n\tdelta_a = %.4f\n\tdelta_b = %.4f\n\tdelta_y = %.4f\n\tdelta_v_n = %.4f\n\tdelta_v_e = %.4f\n\tdelta_v_d = %.4f\n\tdelta_lat = %.4f\n\tdelta_lon = %.4f\n\tdelta_h = %.4f\n\tB_n = %.4f\n\tB_e = %.4f\n\tB_d = %.4f\n\tD_n = %.4f\n\tD_e = %.4f\n\t\D_d = %.4f\n]\n", this->X(0, 0), this->X(1, 0),this->X(2, 0),this->X(3, 0),this->X(4, 0),this->X(5, 0),this->X(6, 0),this->X(7, 0),this->X(8, 0),this->X(9, 0),this->X(10, 0),this->X(11, 0),this->X(12, 0),this->X(13, 0),this->X(14, 0));
+
+    // printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys[0], nominal_sys[1],nominal_sys[2], nominal_sys[3],nominal_sys[4],nominal_sys[5],nominal_sys[6],nominal_sys[7],nominal_sys[8]);
+    printf("/*%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f*/\n", X_corrected(0,0), nominal_sys[0], X_corrected(1,0), nominal_sys[1], X_corrected(2,0), nominal_sys[2], X_corrected(3,0), nominal_sys[3], X_corrected(4,0), nominal_sys[4], X_corrected(5,0), nominal_sys[5]);
+
 }

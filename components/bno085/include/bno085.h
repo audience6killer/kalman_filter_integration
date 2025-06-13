@@ -5,13 +5,18 @@ extern "C"
 {
 #endif
 
+// HOME
+#define INIT_LAT 19.5037727355f
+#define INIT_LON -99.1248474121f
+#define INIT_ALT 2331.8000488f
+
     typedef struct
     {
         float integral;
         float prev_diff_val;
     } integrator_t;
 
-    typedef struct 
+    typedef struct
     {
         float lat;
         float lon;
@@ -24,11 +29,14 @@ extern "C"
         integrator_t lon; // In degrees
         integrator_t alt;
         integrator_t vn; // North
-        integrator_t ve;  // East
-        integrator_t vd;  // Down
+        integrator_t ve; // East
+        integrator_t vd; // Down
         float roll;
         float pitch;
         float yaw;
+        float fn;
+        float fe;
+        float fd;
     } state_vector_t;
 
     typedef enum
@@ -40,19 +48,21 @@ extern "C"
         IMU_ERROR = BIT4,
     } imu_state_e;
 
-    typedef enum 
+    typedef enum
     {
         IMU_ERR_I2C_ERROR = BIT0,
         IMU_ERR_ORIGIN_NOT_SET = BIT1,
     } imu_err_e;
 
-    typedef enum {
+    typedef enum
+    {
         IMU_CMD_START = 0,
         IMU_CMD_STOP,
         IMU_CMD_SET_ORIGIN,
     } imu_cmd_e;
 
-    typedef struct {
+    typedef struct
+    {
         imu_cmd_e cmd;
         geodesic_point_t *origin;
     } imu_cmd_t;
