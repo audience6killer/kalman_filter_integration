@@ -79,6 +79,8 @@ void imu_update_pose(void)
 	float delta_time = (c_time - prev_time) / 1E6; // Convert microseconds to seconds
 	prev_time = c_time;
 
+	// printf("Delta time: %f\n", delta_time);
+
 	float fn = g_imu_data.accx - g_state_vector.yaw * g_imu_data.accy + g_state_vector.pitch * g_imu_data.accz;
 	float fe = g_state_vector.yaw * g_imu_data.accx + g_imu_data.accy - g_state_vector.roll * g_imu_data.accz;
 	float fd = -g_state_vector.pitch * g_imu_data.accx + g_state_vector.roll * g_imu_data.accy + g_imu_data.accz;
@@ -87,16 +89,20 @@ void imu_update_pose(void)
 	g_state_vector.fe = fe;
 	g_state_vector.fd = fd;
 
+	// printf("/*%f,%f,%f*/\n", g_state_vector.fn, g_state_vector.fe, g_state_vector.fd);
+
 	const float vn = g_state_vector.vn.integral;
 	const float ve = g_state_vector.ve.integral;
 	const float vd = g_state_vector.vd.integral;
-	const float lat = DEG_TO_RAD * g_state_vector.lat.integral;
+	const float lat = g_state_vector.lat.integral;
 	const float alt = g_state_vector.alt.integral;
 	const float R_0_alt = R_0 + alt;
 
 	float vn_dot = fn - 2 * OMEGA_E * ve * sinf(lat) + (vn * vd - powf(ve, 2) * tanf(lat)) / (R_0_alt);
 	float ve_dot = fe + 2 * OMEGA_E * (vn * sinf(lat) + ve * cosf(lat)) + (ve) / (R_0_alt) * (vd + vn * tanf(lat));
 	float vd_dot = fd - 2 * OMEGA_E * ve * cosf(lat) - (powf(ve, 2) + powf(vn, 2)) / (R_0_alt);
+
+	// printf("/*%f,%f,%f*/\n", ve_dot, vn_dot, vd_dot);
 
 	// Speed integration
 	g_state_vector.vn.integral += delta_time * 0.5f * (g_state_vector.vn.prev_diff_val + vn_dot);
@@ -108,16 +114,23 @@ void imu_update_pose(void)
 	g_state_vector.vd.integral += delta_time * 0.5f * (g_state_vector.vd.prev_diff_val + vn_dot);
 	g_state_vector.vd.prev_diff_val = vd_dot;
 
+	// printf("/*%f,%f,%f*/\n", g_state_vector.ve.integral, g_state_vector.vn.integral, g_state_vector.vd.integral);
+
 	// Position integration
-	const float lat_dot = g_state_vector.vn.integral / (R_n + alt);
-	const float lon_dot = g_state_vector.ve.integral / ((R_e + alt) * cosf(lat));
-	const float alt_dot = -g_state_vector.vd.integral;
+	const double lat_dot = g_state_vector.vn.integral / (R_n + alt);
+	const double lon_dot = g_state_vector.ve.integral / ((R_e + alt) * cosf(lat));
+	const double alt_dot = -g_state_vector.vd.integral;
+
+	printf("/*%.10lf,%.10lf,%.10lf*/\n", lat_dot, lon_dot, alt_dot);
 
 	g_state_vector.lat.integral += delta_time * 0.5f * (g_state_vector.lat.prev_diff_val + lat_dot);
 	g_state_vector.lat.prev_diff_val = lat_dot;
 	g_state_vector.lon.integral += delta_time * 0.5f * (g_state_vector.lon.prev_diff_val + lon_dot);
 	g_state_vector.lon.prev_diff_val = lon_dot;
 	g_state_vector.alt.integral += delta_time * 0.5f * (g_state_vector.alt.prev_diff_val + alt_dot);
+	g_state_vector.alt.prev_diff_val = alt_dot;
+
+	// printf("/*%.7f,%.7f,%.7f*/\n", g_state_vector.lat.integral, g_state_vector.lon.integral, g_state_vector.alt.integral);
 
 	if (xQueueSend(g_imu_data_queue_handle, &g_state_vector, pdMS_TO_TICKS(100)) != pdPASS)
 	{
@@ -186,11 +199,11 @@ void imu_data_loop(void)
 			g_imu_data.accx = g_IMU.getLinAccelX();
 			g_imu_data.accy = g_IMU.getLinAccelY();
 			g_imu_data.accz = g_IMU.getLinAccelZ();
-			byte accel_acc = g_IMU.getAccelAccuracy();
+	        byte accel_acc = g_IMU.getAccelAccuracy();
 
 			g_reading_flag = g_reading_flag | 1 << IMU_ACCEL_BIT;
 
-			// printf("%f,%f,%f,%d\r\n", g_imu_data.accx, g_imu_data.accy, g_imu_data.accz, accel_acc);
+			//printf("%f,%f,%f,%d\r\n", g_imu_data.accx, g_imu_data.accy, g_imu_data.accz, accel_acc);
 		}
 		else if (g_IMU.getSensorEventID() == SENSOR_REPORTID_ROTATION_VECTOR)
 		{

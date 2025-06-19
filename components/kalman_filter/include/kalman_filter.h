@@ -10,25 +10,26 @@ public:
     virtual ~Nav_EKF();
     virtual void Init();
 
-    dspm::Mat h_gps_only;
-    dspm::Mat h_odometry_only;
-    dspm::Mat h_full_measure;
-
     // X_corrected is the the difference between the INS and the X vector
     // L_ins - delta_L
     dspm::Mat X_corrected;
+
+    enum class MeasureSource {FULL = 0, GPS, ODOMETRY};
 
     virtual dspm::Mat StateXdot(dspm::Mat &x, float *u);
     virtual void LinearizeFG(dspm::Mat &x, float *u);
     virtual void Process(float *u, float dt);
 
 public:
-    void UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d);
-    // void UpdateNominalSystem(dspm::Mat state);
+    void UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading);
+    void Update(float *measured, float *R, Nav_EKF::MeasureSource source);
     void PrintXState(void);
 
 private:
-    float nominal_sys[9]; // The Strapdown Navigation System
+    float nominal_sys[10]; // The Strapdown Navigation System
+    dspm::Mat H_GPS;
+    dspm::Mat H_ODOMETRY;
+    dspm::Mat H_FULL;
 };
 
 #endif

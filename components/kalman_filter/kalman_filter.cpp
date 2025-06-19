@@ -13,9 +13,23 @@
 #define SIGMA_POS SIGMA_FX + SIGMA_FY + SIGMA_FZ
 
 Nav_EKF::Nav_EKF() : ekf(15, 15),
-                     h_full_measure(7, 15),
-                     nominal_sys(9, 1)
+                     nominal_sys(9, 1),
+                     H_GPS(3, 15),
+                     H_ODOMETRY(4, 15),
+                     H_FULL(7, 15)
 {
+    /* Initialize measurement matrix H */
+    this->H_FULL *= 0.0f;
+    this->H_FULL(6, 2) = -1.0f;
+    this->H_FULL.Copy(dspm::Mat::eye(3), 3, 3);
+    this->H_FULL.Copy(dspm::Mat::eye(3), 0, 6);
+
+    this->H_GPS *= 0.0f;
+    this->H_GPS.Copy(dspm::Mat::eye(3), 0, 6);
+
+    this->H_ODOMETRY *= 0.0f;
+    this->H_ODOMETRY(3, 2) = -1.0f;
+    this->H_ODOMETRY.Copy(dspm::Mat::eye(3), 0, 3);
 }
 
 Nav_EKF::~Nav_EKF()
@@ -25,22 +39,16 @@ Nav_EKF::~Nav_EKF()
 void Nav_EKF::Init()
 {
     // Initialize the nominal system
-    for(size_t i = 0; i < 9; i++)
+    for (size_t i = 0; i < 9; i++)
     {
         this->nominal_sys[i] = 0.0f;
     }
 
     // G will be constant
-    //this->G.Copy(dspm::Mat::eye(this->NUMX), 0, 0);
+    // this->G.Copy(dspm::Mat::eye(this->NUMX), 0, 0);
     this->G *= 0.0f;
 
     this->Q.Copy(0.1f * dspm::Mat::eye(15), 0, 0);
-
-    // All the measurement matrix will be linear
-    this->h_full_measure *= 0.0f;
-    this->h_full_measure(6, 2) = -1.0f;
-    this->h_full_measure.Copy(dspm::Mat::eye(3), 3, 3);
-    this->h_full_measure.Copy(dspm::Mat::eye(3), 0, 6);
 
     // Process covariance
     this->Q(0, 0) = SIGMA_ANG;
@@ -79,7 +87,7 @@ void Nav_EKF::LinearizeFG(dspm::Mat &x, float *u)
     /* The state vector is the SNIS error vector */
     float lat = nominal_sys[0];
     float lon = nominal_sys[1];
-    float h =   nominal_sys[2];
+    float h = nominal_sys[2];
     float v_n = nominal_sys[3];
     float v_e = nominal_sys[4];
     float v_d = nominal_sys[5];
@@ -160,11 +168,8 @@ dspm::Mat Nav_EKF::StateXdot(dspm::Mat &x, float *u)
     return Xdot;
 }
 
-void Nav_EKF::UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d)
+void Nav_EKF::UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading)
 {
-    // printf("lat: %.6f, lon: %.6f, h: %.6f, v_n: %.6f, v_e: %.6f, v_d: %.6f, f_n: %.6f, f_e: %.6f, f_d: %.6f\n",
-    //    lat, lon, h, v_n, v_e, v_d, f_n, f_e, f_d);
-
     this->nominal_sys[0] = lat;
     this->nominal_sys[1] = lon;
     this->nominal_sys[2] = h;
@@ -174,21 +179,79 @@ void Nav_EKF::UpdateNominalSystem(float lat, float lon, float h, float v_n, floa
     this->nominal_sys[6] = f_n;
     this->nominal_sys[7] = f_e;
     this->nominal_sys[8] = f_d;
-
-    //printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys(0, 0), nominal_sys(1, 0),nominal_sys(2, 0),nominal_sys(3, 0),nominal_sys(4, 0),nominal_sys(5, 0),nominal_sys(6, 0),nominal_sys(7, 0),nominal_sys(8, 0));
+    this->nominal_sys[9] = heading;
 }
-
-//void Nav_EKF::UpdateNominalSystem(dspm::Mat state)
-//{
-//    this->nominal_sys.Copy(state, 0, 0);
-//    //printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys(0, 0), nominal_sys(1, 0),nominal_sys(2, 0),nominal_sys(3, 0),nominal_sys(4, 0),nominal_sys(5, 0),nominal_sys(6, 0),nominal_sys(7, 0),nominal_sys(8, 0));
-//}
 
 void Nav_EKF::PrintXState(void)
 {
     // printf("[\n\tdelta_a = %.4f\n\tdelta_b = %.4f\n\tdelta_y = %.4f\n\tdelta_v_n = %.4f\n\tdelta_v_e = %.4f\n\tdelta_v_d = %.4f\n\tdelta_lat = %.4f\n\tdelta_lon = %.4f\n\tdelta_h = %.4f\n\tB_n = %.4f\n\tB_e = %.4f\n\tB_d = %.4f\n\tD_n = %.4f\n\tD_e = %.4f\n\t\D_d = %.4f\n]\n", this->X(0, 0), this->X(1, 0),this->X(2, 0),this->X(3, 0),this->X(4, 0),this->X(5, 0),this->X(6, 0),this->X(7, 0),this->X(8, 0),this->X(9, 0),this->X(10, 0),this->X(11, 0),this->X(12, 0),this->X(13, 0),this->X(14, 0));
 
     // printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys[0], nominal_sys[1],nominal_sys[2], nominal_sys[3],nominal_sys[4],nominal_sys[5],nominal_sys[6],nominal_sys[7],nominal_sys[8]);
-    printf("/*%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f*/\n", X_corrected(0,0), nominal_sys[0], X_corrected(1,0), nominal_sys[1], X_corrected(2,0), nominal_sys[2], X_corrected(3,0), nominal_sys[3], X_corrected(4,0), nominal_sys[4], X_corrected(5,0), nominal_sys[5]);
+    printf("/*%.8f,%.8f,%.8f,%.8f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f*/\n", X_corrected(0, 0), nominal_sys[0], X_corrected(1, 0), nominal_sys[1], X_corrected(2, 0), nominal_sys[2], X_corrected(3, 0), nominal_sys[3], X_corrected(4, 0), nominal_sys[4], X_corrected(5, 0), nominal_sys[5]);
+}
 
+void Nav_EKF::Update(float *measured, float *R, Nav_EKF::MeasureSource source)
+{
+    if (source == Nav_EKF::MeasureSource::FULL)
+    {
+        float err_measure[7];
+
+        for (size_t i = 0; i < 6; i++)
+        {
+            err_measure[i] = nominal_sys[i] - measured[i];
+        }
+        err_measure[6] = nominal_sys[9] - measured[6];
+
+        dspm::Mat expected_X = H_FULL * X;
+        float expected[7];
+
+        for(size_t i = 0; i < 7; i++)
+        {
+            expected[i] = expected_X(i, 0);
+        }
+
+        ekf::Update(this->H_FULL, err_measure, expected, R);
+    }
+    else if (source == Nav_EKF::MeasureSource::GPS)
+    {
+        float err_measure[3];
+
+        for (size_t i = 0; i < 3; i++)
+        {
+            err_measure[i] = nominal_sys[i] - measured[i];
+        }
+
+        dspm::Mat expected_X = H_GPS * X;
+        float expected[3];
+
+        for(size_t i = 0; i < 3; i++)
+        {
+            expected[i] = expected_X(i, 0);
+        }
+
+        ekf::Update(this->H_GPS, err_measure, expected, R);
+    }
+    else if (source == Nav_EKF::MeasureSource::ODOMETRY)
+    {
+        float err_measure[4];
+
+        for (size_t i = 0; i < 3; i++)
+        {
+            err_measure[i] = nominal_sys[i] - measured[i];
+        }
+        err_measure[6] = nominal_sys[9] - measured[3];
+
+        dspm::Mat expected_X = H_ODOMETRY * X;
+        float expected[4];
+
+        for(size_t i = 0; i < 4; i++)
+        {
+            expected[i] = expected_X(i, 0);
+        }
+        ekf::Update(this->H_ODOMETRY, err_measure, expected, R);
+    }
+    else
+    {
+        return;
+    }
 }

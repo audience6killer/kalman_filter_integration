@@ -14,15 +14,27 @@ extern "C"
         double hdop;
     } gps_coords_t;
 
-    QueueHandle_t neo_m8n_get_queue(void);
-    /**
-     * @brief Latitude and longitude must be in radians and alt in meters
-     * 
-     * @param lat 
-     * @param lon 
-     * @param alt 
-     */
-    void neo_m8n_set_origin(float lat, float lon, float alt);
+    typedef enum 
+    {
+        NEO_M8N_CMD_STOP = 0,
+        NEO_M8N_CMD_START,
+    } neo_m8n_cmd_e;
+
+    typedef enum
+    {
+        NEO_M8N_STATE_STOPPED = 0,
+        NEO_M8N_STATE_STARTED,
+    } neo_m8n_state_e;
+
+
+    typedef struct 
+    {
+        neo_m8n_cmd_e cmd;
+    } neo_m8n_cmd_t;
+
+    esp_err_t neo_m8n_get_data_queue(QueueHandle_t *handle);
+
+    esp_err_t neo_m8n_get_cmd_queue(QueueHandle_t *handle);
 
     void neo_m8n_task_start(void);
 

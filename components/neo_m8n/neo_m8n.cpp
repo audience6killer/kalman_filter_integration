@@ -11,20 +11,133 @@
 #include "neo_m8n.h"
 
 static const char TAG[] = "neo_m8n";
-static QueueHandle_t g_gps_queue_handle = NULL;
+static QueueHandle_t g_gps_data_queue_handle = NULL;
+static QueueHandle_t g_gps_cmd_queue_handle = NULL;
+static neo_m8n_state_e g_gps_state = NEO_M8N_STATE_STOPPED;
 
 static TinyGPSPlus g_neo_m8n;
 
 esp_err_t neo_m8n_send2queue(gps_coords_t &coord)
 {
-    ESP_RETURN_ON_FALSE(g_gps_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "Queue handle is not initialized!");
+    // ESP_RETURN_ON_FALSE(g_gps_data_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "Queue handle is not initialized!");
 
-    return xQueueSend(g_gps_queue_handle, &coord, portMAX_DELAY) == pdPASS ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+    return xQueueSend(g_gps_data_queue_handle, &coord, portMAX_DELAY) == pdPASS ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
 }
 
-QueueHandle_t neo_m8n_get_queue(void)
+esp_err_t neo_m8n_get_data_queue(QueueHandle_t *handle)
 {
-    return g_gps_queue_handle;
+    ESP_RETURN_ON_FALSE(g_gps_data_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "g_gps_data_queue NULL when retriving");
+
+    *handle = g_gps_data_queue_handle;
+
+    return ESP_OK;
+}
+
+esp_err_t neo_m8n_get_cmd_queue(QueueHandle_t *handle)
+{
+    ESP_RETURN_ON_FALSE(g_gps_cmd_queue_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "g_gps_cmd_queue NULL when retriving");
+
+    *handle = g_gps_cmd_queue_handle;
+
+    return ESP_OK;
+}
+
+/* Event handlers */
+esp_err_t neo_m8n_start_event_handler(void)
+{
+    if (g_gps_state == NEO_M8N_STATE_STARTED)
+    {
+        ESP_LOGW(TAG, "Warning: Neo M8N is already started");
+        return ESP_OK;
+    }
+
+    g_gps_state = NEO_M8N_STATE_STARTED;
+    ESP_LOGI(TAG, "Process started successfully");
+
+    return ESP_OK;
+}
+esp_err_t neo_m8n_stop_event_handler(void)
+{
+    if (g_gps_state == NEO_M8N_STATE_STOPPED)
+    {
+        ESP_LOGW(TAG, "Warning: Neo M8N is already stopped");
+        return ESP_OK;
+    }
+
+    g_gps_state = NEO_M8N_STATE_STOPPED;
+    ESP_LOGI(TAG, "Process stopped successfully");
+
+    return ESP_OK;
+}
+
+void neo_m8n_event_loop(void)
+{
+    neo_m8n_cmd_t cmd;
+    if (xQueueReceive(g_gps_cmd_queue_handle, &cmd, pdMS_TO_TICKS(10)))
+    {
+        switch (cmd.cmd)
+        {
+        case NEO_M8N_CMD_STOP:
+            ESP_LOGI(TAG, "Event Received: Stop");
+            if (neo_m8n_stop_event_handler() != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Error: Failed to process stop event");
+            }
+            break;
+        case NEO_M8N_CMD_START:
+            ESP_LOGI(TAG, "Event Received: Stop");
+            if (neo_m8n_start_event_handler() != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Error: Failed to process start event");
+            }
+            break;
+        default:
+            ESP_LOGE(TAG, "Error: Unknown event received");
+            break;
+        }
+    }
+}
+
+void neo_m8n_data_loop(void)
+{
+    uint8_t data[NEO_M8N_UART_BUFF_SIZE];
+    memset(data, 0, NEO_M8N_UART_BUFF_SIZE);
+
+    // Read data from UART
+    int len = uart_read_bytes(NEO_M8N_UART_NUM, data, NEO_M8N_UART_BUFF_SIZE, pdMS_TO_TICKS(100));
+
+    // printf("Data received: %d\n", len);
+
+    if (len > 0)
+    {
+        // ESP_LOGI(TAG, "Data received: %d", len);
+        for (int i = 0; i < len; i++)
+        {
+            g_neo_m8n.encode(data[i]); // Feed data into TinyGPS++
+        }
+        // printf("%s\n", data);
+        // Check if location is updated
+        if (g_neo_m8n.location.isUpdated())
+        {
+            gps_coords_t coord = {
+                .lat = g_neo_m8n.location.lat(),
+                .lon = g_neo_m8n.location.lng(),
+                .alt = g_neo_m8n.altitude.meters(),
+                .hdop = g_neo_m8n.hdop.hdop()};
+            ESP_ERROR_CHECK(neo_m8n_send2queue(coord));
+
+#if true 
+            printf("/*%.7f,%.7f,%.7f,%.2f*/\n",
+                   coord.lat, coord.lon, coord.alt, coord.hdop);
+#endif
+        };
+
+        for (int i = 0; i < NEO_M8N_UART_BUFF_SIZE; i++)
+        {
+            data[i] = 0;
+        }
+    }
+    // uart_flush(uart_num);
 }
 
 static void neo_m8n_task(void *pvParamenter)
@@ -32,7 +145,7 @@ static void neo_m8n_task(void *pvParamenter)
     ESP_LOGI(TAG, "Iniatilizing task");
 
     // UART configuration
-    const uart_port_t uart_num = UART_NUM_1;
+    const uart_port_t uart_num = NEO_M8N_UART_NUM;
     uart_config_t uart_config = {
         .baud_rate = 9600,
         .data_bits = UART_DATA_8_BITS,
@@ -46,62 +159,23 @@ static void neo_m8n_task(void *pvParamenter)
     // Configure UART parameters
     ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
 
-    //ESP_ERROR_CHECK(uart_set_pin(uart_num, NEO_M8N_UART_TX, NEO_M8N_UART_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    // ESP_ERROR_CHECK(uart_set_pin(uart_num, NEO_M8N_UART_TX, NEO_M8N_UART_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     ESP_ERROR_CHECK(uart_set_pin(uart_num, NEO_M8N_UART_TX, NEO_M8N_UART_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     ESP_ERROR_CHECK(uart_driver_install(uart_num, NEO_M8N_UART_BUFF_SIZE * 2, 0, 0, NULL, 0));
 
-    g_gps_queue_handle = xQueueCreate(4, sizeof(gps_coords_t));
-
-    uint8_t data[NEO_M8N_UART_BUFF_SIZE];
-
-    for (int i = 0; i < NEO_M8N_UART_BUFF_SIZE; i++)
-    {
-        data[i] = 0;
-    }
+    g_gps_data_queue_handle = xQueueCreate(4, sizeof(gps_coords_t));
+    g_gps_cmd_queue_handle = xQueueCreate(5, sizeof(neo_m8n_cmd_t));
 
     for (;;)
     {
-        // Read data from UART
-        int len = uart_read_bytes(uart_num, data, NEO_M8N_UART_BUFF_SIZE, pdMS_TO_TICKS(100));
+        if (g_gps_state == NEO_M8N_STATE_STARTED)
+            neo_m8n_data_loop();
 
-        //printf("Data received: %d\n", len);
+        neo_m8n_event_loop();
 
-        if (len > 0)
-        {
-            //ESP_LOGI(TAG, "Data received: %d", len);
-            for (int i = 0; i < len; i++)
-            {
-                g_neo_m8n.encode(data[i]); // Feed data into TinyGPS++
-            }
-            printf("%s\n", data);
-            // Check if location is updated
-            if (g_neo_m8n.location.isUpdated())
-            {
-
-                gps_coords_t coord = {
-                    .lat = g_neo_m8n.location.lat(),
-                    .lon = g_neo_m8n.location.lng(),
-                    .alt = g_neo_m8n.altitude.meters(),
-                    .hdop = g_neo_m8n.hdop.hdop()};
-                ESP_ERROR_CHECK(neo_m8n_send2queue(coord));
-
-#if true 
-                printf("Lat: %.7f, Lng: %.7f, Alt: %.2f meters, HDOP: %.2f",
-                        coord.lat, coord.lon, coord.alt, coord.hdop);
-#endif
-            };
-
-            for (int i = 0; i < NEO_M8N_UART_BUFF_SIZE; i++)
-            {
-                data[i] = 0;
-            }
-        }
-        
-        //uart_flush(uart_num);
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-
 }
 
 void neo_m8n_task_start(void)

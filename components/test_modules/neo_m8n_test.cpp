@@ -13,10 +13,18 @@ static void test_neo_m8n_task(void *pvParameters)
     neo_m8n_task_start();
 
     QueueHandle_t gps_queue;
+    QueueHandle_t gps_cmd_queue;
 
-    gps_queue = neo_m8n_get_queue();
+    neo_m8n_get_data_queue(&gps_queue);
+    neo_m8n_get_cmd_queue(&gps_cmd_queue);
 
     gps_coords_t state_vector;
+
+    neo_m8n_cmd_t cmd = {
+        .cmd = NEO_M8N_CMD_START,
+    };
+
+    xQueueSend(gps_cmd_queue, &cmd, pdMS_TO_TICKS(100));
 
     for (;;)
     {
