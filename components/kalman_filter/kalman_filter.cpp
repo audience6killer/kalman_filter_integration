@@ -168,7 +168,7 @@ dspm::Mat Nav_EKF::StateXdot(dspm::Mat &x, float *u)
     return Xdot;
 }
 
-void Nav_EKF::UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading)
+void Nav_EKF::UpdateNominalSystem(double lat, double lon, double h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading)
 {
     this->nominal_sys[0] = lat;
     this->nominal_sys[1] = lon;
@@ -187,7 +187,7 @@ void Nav_EKF::PrintXState(void)
     // printf("[\n\tdelta_a = %.4f\n\tdelta_b = %.4f\n\tdelta_y = %.4f\n\tdelta_v_n = %.4f\n\tdelta_v_e = %.4f\n\tdelta_v_d = %.4f\n\tdelta_lat = %.4f\n\tdelta_lon = %.4f\n\tdelta_h = %.4f\n\tB_n = %.4f\n\tB_e = %.4f\n\tB_d = %.4f\n\tD_n = %.4f\n\tD_e = %.4f\n\t\D_d = %.4f\n]\n", this->X(0, 0), this->X(1, 0),this->X(2, 0),this->X(3, 0),this->X(4, 0),this->X(5, 0),this->X(6, 0),this->X(7, 0),this->X(8, 0),this->X(9, 0),this->X(10, 0),this->X(11, 0),this->X(12, 0),this->X(13, 0),this->X(14, 0));
 
     // printf("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f\n", nominal_sys[0], nominal_sys[1],nominal_sys[2], nominal_sys[3],nominal_sys[4],nominal_sys[5],nominal_sys[6],nominal_sys[7],nominal_sys[8]);
-    printf("/*%.8f,%.8f,%.8f,%.8f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f*/\n", X_corrected(0, 0), nominal_sys[0], X_corrected(1, 0), nominal_sys[1], X_corrected(2, 0), nominal_sys[2], X_corrected(3, 0), nominal_sys[3], X_corrected(4, 0), nominal_sys[4], X_corrected(5, 0), nominal_sys[5]);
+    printf("/*%.10lf,%.10lf,%.10lf,%.10lf,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f*/\n", X_corrected(0, 0), nominal_sys[0], X_corrected(1, 0), nominal_sys[1], X_corrected(2, 0), nominal_sys[2], X_corrected(3, 0), nominal_sys[3], X_corrected(4, 0), nominal_sys[4], X_corrected(5, 0), nominal_sys[5]);
 }
 
 void Nav_EKF::Update(float *measured, float *R, Nav_EKF::MeasureSource source)

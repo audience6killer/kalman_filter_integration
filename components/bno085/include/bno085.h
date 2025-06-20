@@ -5,6 +5,8 @@ extern "C"
 {
 #endif
 
+#include "common_types.h"
+
 // HOME
 #define INIT_LAT 19.5037727355f
 #define INIT_LON -99.1248474121f
@@ -12,16 +14,9 @@ extern "C"
 
     typedef struct
     {
-        float integral;
-        float prev_diff_val;
+        double integral;
+        double prev_diff_val;
     } integrator_t;
-
-    typedef struct
-    {
-        float lat;
-        float lon;
-        float alt;
-    } geodesic_point_t;
 
     typedef struct
     {
@@ -64,7 +59,7 @@ extern "C"
     typedef struct
     {
         imu_cmd_e cmd;
-        geodesic_point_t *origin;
+        gps_coords_t *origin;
     } imu_cmd_t;
 
     esp_err_t imu_get_data_queue_handle(QueueHandle_t *queue);

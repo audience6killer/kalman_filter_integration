@@ -4,6 +4,8 @@ extern "C"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_log.h"
+
+#include "common_types.h"
 }
 
 #include "Arduino.h"
@@ -19,7 +21,7 @@ static bool g_started_flag = false;
 
 void test_start(void)
 {
-    geodesic_point_t origin = {
+    gps_coords_t origin = {
         .lat = INIT_LAT,
         .lon = INIT_LON,
         .alt = INIT_ALT,

@@ -7,6 +7,7 @@ extern "C"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_check.h"
+#include "common_types.h"
 }
 
 #include "Arduino.h"
@@ -121,16 +122,16 @@ void imu_update_pose(void)
 	const double lon_dot = g_state_vector.ve.integral / ((R_e + alt) * cosf(lat));
 	const double alt_dot = -g_state_vector.vd.integral;
 
-	printf("/*%.10lf,%.10lf,%.10lf*/\n", lat_dot, lon_dot, alt_dot);
+	// printf("/*%.10lf,%.10lf,%.10lf*/\n", lat_dot, lon_dot, alt_dot);
 
-	g_state_vector.lat.integral += delta_time * 0.5f * (g_state_vector.lat.prev_diff_val + lat_dot);
+	g_state_vector.lat.integral += delta_time * 0.5 * (g_state_vector.lat.prev_diff_val + lat_dot);
 	g_state_vector.lat.prev_diff_val = lat_dot;
-	g_state_vector.lon.integral += delta_time * 0.5f * (g_state_vector.lon.prev_diff_val + lon_dot);
+	g_state_vector.lon.integral += delta_time * 0.5 * (g_state_vector.lon.prev_diff_val + lon_dot);
 	g_state_vector.lon.prev_diff_val = lon_dot;
-	g_state_vector.alt.integral += delta_time * 0.5f * (g_state_vector.alt.prev_diff_val + alt_dot);
+	g_state_vector.alt.integral += delta_time * 0.5 * (g_state_vector.alt.prev_diff_val + alt_dot);
 	g_state_vector.alt.prev_diff_val = alt_dot;
 
-	// printf("/*%.7f,%.7f,%.7f*/\n", g_state_vector.lat.integral, g_state_vector.lon.integral, g_state_vector.alt.integral);
+	// printf("/*%.10lf,%.10lf,%.10lf*/\n", g_state_vector.lat.integral, g_state_vector.lon.integral, g_state_vector.alt.integral);
 
 	if (xQueueSend(g_imu_data_queue_handle, &g_state_vector, pdMS_TO_TICKS(100)) != pdPASS)
 	{
@@ -198,8 +199,8 @@ void imu_data_loop(void)
 		{
 			g_imu_data.accx = g_IMU.getLinAccelX();
 			g_imu_data.accy = g_IMU.getLinAccelY();
-			g_imu_data.accz = g_IMU.getLinAccelZ();
-	        byte accel_acc = g_IMU.getAccelAccuracy();
+			g_imu_data.accz = -g_IMU.getLinAccelZ();
+	        //byte accel_acc = g_IMU.getAccelAccuracy();
 
 			g_reading_flag = g_reading_flag | 1 << IMU_ACCEL_BIT;
 
@@ -264,7 +265,7 @@ esp_err_t imu_stop_event_handler(void)
 	return ESP_OK;
 }
 
-esp_err_t imu_set_origin_event_handler(geodesic_point_t *origin)
+esp_err_t imu_set_origin_event_handler(gps_coords_t *origin)
 {
 	ESP_RETURN_ON_FALSE(origin != NULL, ESP_ERR_INVALID_STATE, TAG, "Origin point is NULL");
 
@@ -304,11 +305,6 @@ void imu_cmd_handler(void)
 		case IMU_CMD_STOP:
 			ESP_LOGI(TAG, "Event: Stop process");
 			imu_stop_event_handler();
-			break;
-
-		case IMU_CMD_SET_ORIGIN:
-			ESP_LOGI(TAG, "Event: Set origin");
-			imu_set_origin_event_handler(cmd.origin);
 			break;
 
 		default:

@@ -21,12 +21,12 @@ public:
     virtual void Process(float *u, float dt);
 
 public:
-    void UpdateNominalSystem(float lat, float lon, float h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading);
+    void UpdateNominalSystem(double lat, double lon, double h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading);
     void Update(float *measured, float *R, Nav_EKF::MeasureSource source);
     void PrintXState(void);
 
 private:
-    float nominal_sys[10]; // The Strapdown Navigation System
+    double nominal_sys[10]; // The Strapdown Navigation System
     dspm::Mat H_GPS;
     dspm::Mat H_ODOMETRY;
     dspm::Mat H_FULL;
