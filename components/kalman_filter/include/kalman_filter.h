@@ -1,6 +1,9 @@
 #ifndef KALMAN_FILTER_H
 #define KALMAN_FILTER_H
 
+#include "common_types.h"
+#include "geo2ned.h"
+
 #include "ekf.h"
 
 class Nav_EKF : public ekf
@@ -23,6 +26,7 @@ public:
 public:
     void UpdateNominalSystem(double lat, double lon, double h, float v_n, float v_e, float v_d, float f_n, float f_e, float f_d, float heading);
     void Update(float *measured, float *R, Nav_EKF::MeasureSource source);
+    void SetOrigin(gps_coords_t origin);
     void PrintXState(void);
 
 private:
@@ -30,6 +34,7 @@ private:
     dspm::Mat H_GPS;
     dspm::Mat H_ODOMETRY;
     dspm::Mat H_FULL;
+    geo2ned_handler_t geo2ned_conv;
 };
 
 #endif

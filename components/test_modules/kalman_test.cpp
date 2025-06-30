@@ -21,6 +21,10 @@ extern "C"
 #define KALMAN_TEST_CORE_ID 0
 #define KALMAN_TEST_TASK_PRIORITY 15
 
+#define KALMAN_TEST_DEBUG
+// #define KALMAN_NO_GPS
+
+
 static const char *TAG = "kalman_test";
 
 static Nav_EKF *kalman_filter = NULL;
@@ -29,10 +33,12 @@ static QueueHandle_t g_imu_data_queue_handle = NULL;
 static QueueHandle_t g_gps_cmd_queue_handle = NULL;
 static QueueHandle_t g_gps_data_queue_handle = NULL;
 
+static bool g_has_imu_started = false;
+
 static EventGroupHandle_t g_gps_event_group = NULL;
 
-    static void
-    test_kalman_task(void *pvParameters)
+static void
+test_kalman_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Initializing kalman_test task");
 
@@ -75,13 +81,15 @@ static EventGroupHandle_t g_gps_event_group = NULL;
         ESP_LOGE(TAG, "Error sending start cmd to gps");
     }
 
-    EventBits_t bits = 0; 
+    #ifdef KALMAN_NO_GPS
+    EventBits_t bits = 0;
     do
     {
         ESP_LOGI(TAG, "Waiting 10s for GPS to start");
         bits = xEventGroupWaitBits(g_gps_event_group, NEO_M8N_STATE_STARTED, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
-    } while ((bits & NEO_M8N_STATE_STARTED) == 0);
+    } while (!((bits & NEO_M8N_STATE_STARTED) != 0));
 
+    vTaskDelay(pdMS_TO_TICKS(1000));
     gps_coords_t coord;
     neo_m8n_get_last_coord(&coord);
 
@@ -91,6 +99,17 @@ static EventGroupHandle_t g_gps_event_group = NULL;
         .lon = coord.lon,
         .alt = coord.alt,
     };
+    #else
+    gps_coords_t origin = {
+        .lat = INIT_LAT,
+        .lon = INIT_LON,
+        .alt = INIT_ALT,
+        .hdop = 0.0,
+    };
+    #endif
+
+    kalman_filter->SetOrigin(origin);
+
     imu_cmd_t cmd_origin = {
         .cmd = IMU_CMD_SET_ORIGIN,
         .origin = &origin,
@@ -113,35 +132,44 @@ static EventGroupHandle_t g_gps_event_group = NULL;
     state_vector_t c_state;
     gps_coords_t gps_data;
 
-    static uint32_t last_time = esp_timer_get_time();
+    static uint32_t last_time = 0;
+
     for (;;)
     {
         if (xQueueReceive(g_imu_data_queue_handle, &c_state, pdMS_TO_TICKS(100)))
         {
             uint32_t c_time = esp_timer_get_time();
-            uint32_t time_diff = c_time - last_time;
+            float time_diff = c_time - last_time;
             time_diff *= 1e-6;
             last_time = c_time;
 
+            // printf("%.4f\n", time_diff);
             // kalman_filter->UpdateNominalSystem(state);
             //  Increase nominal state to include angles
             kalman_filter->UpdateNominalSystem(c_state.lat.integral, c_state.lon.integral, c_state.alt.integral, c_state.vn.integral, c_state.ve.integral, c_state.vd.integral, c_state.fn, c_state.fe, c_state.fd, c_state.yaw);
 
-            kalman_filter->Process(0, (float)time_diff);
+            kalman_filter->Process(0, time_diff);
 
+#ifdef KALMAN_TEST_DEBUG
             printf("NCF: ");
             kalman_filter->PrintXState();
+#endif
+
+            g_has_imu_started = true;
         }
 
-        if (xQueueReceive(g_gps_data_queue_handle, &gps_data, pdMS_TO_TICKS(10)))
-        {
-            float measured[] = {(float)gps_data.lat, (float)gps_data.lon, (float)gps_data.alt, 0};
-            float R[] = {(float)gps_data.hdop, (float)gps_data.hdop, (float)gps_data.hdop, (float)gps_data.hdop};
-            kalman_filter->Update(measured, R, Nav_EKF::MeasureSource::GPS);
+        if (g_has_imu_started)
+            if (xQueueReceive(g_gps_data_queue_handle, &gps_data, pdMS_TO_TICKS(10)))
+            {
+                float measured[] = {(float)gps_data.lat, (float)gps_data.lon, (float)gps_data.alt, (float)gps_data.hdop};
+                float R[] = {(float)gps_data.hdop, (float)gps_data.hdop, (float)gps_data.hdop, (float)gps_data.hdop};
+                kalman_filter->Update(measured, R, Nav_EKF::MeasureSource::GPS);
 
-            printf("GPS: ");
-            kalman_filter->PrintXState();
-        }
+#ifdef KALMAN_TEST_DEBUG
+                printf("GPS: ");
+                kalman_filter->PrintXState();
+#endif
+            }
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }

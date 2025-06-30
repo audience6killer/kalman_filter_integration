@@ -75,7 +75,7 @@ void imu_set_state(imu_state_e state)
 void imu_update_pose(void)
 {
 	// Specific force to local geographic reference, angles must be in radians?
-	static int64_t prev_time = 0;
+	static int64_t prev_time = esp_timer_get_time();
 	int64_t c_time = esp_timer_get_time();
 	float delta_time = (c_time - prev_time) / 1E6; // Convert microseconds to seconds
 	prev_time = c_time;
@@ -200,7 +200,7 @@ void imu_data_loop(void)
 			g_imu_data.accx = g_IMU.getLinAccelX();
 			g_imu_data.accy = g_IMU.getLinAccelY();
 			g_imu_data.accz = -g_IMU.getLinAccelZ();
-	        //byte accel_acc = g_IMU.getAccelAccuracy();
+	        byte accel_acc = g_IMU.getAccelAccuracy();
 
 			g_reading_flag = g_reading_flag | 1 << IMU_ACCEL_BIT;
 
@@ -305,6 +305,11 @@ void imu_cmd_handler(void)
 		case IMU_CMD_STOP:
 			ESP_LOGI(TAG, "Event: Stop process");
 			imu_stop_event_handler();
+			break;
+
+		case IMU_CMD_SET_ORIGIN:
+			ESP_LOGI(TAG, "Event: Set origin");
+			imu_set_origin_event_handler(cmd.origin);
 			break;
 
 		default:

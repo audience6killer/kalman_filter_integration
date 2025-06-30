@@ -54,6 +54,7 @@ void geo2ned_set_origin(geo2ned_handler_t handler, gps_coords_t origin)
 
 esp_err_t geo2ned(geo2ned_handler_t handler, gps_coords_t coord, ned_ecef_coords_t *ned_coord)
 {
+    ESP_RETURN_ON_FALSE(handler != NULL, ESP_ERR_INVALID_STATE, TAG, "geo2ned handler is NULL!");
     ESP_RETURN_ON_FALSE(handler->is_origin_set, ESP_ERR_INVALID_STATE, TAG, "Origin is not set yet!");
 
     /* The first step is convert to ECEF */
@@ -71,4 +72,26 @@ esp_err_t geo2ned(geo2ned_handler_t handler, gps_coords_t coord, ned_ecef_coords
     ned_coord->d = handler->mat_ecef2ned[2][0] * x_diff + handler->mat_ecef2ned[2][1] * y_diff + handler->mat_ecef2ned[2][2] * z_diff;
 
     return ESP_OK;
+}
+
+geo2ned_handler_t geo2ned_handler_create(void)
+{
+    geo2ned_handler_t handler = (geo2ned_handler_t)malloc(sizeof(geo2ned_handler));
+
+    for(size_t i = 0; i < 3; i++)
+        for(size_t j = 0; j < 3; j++)
+            handler->mat_ecef2ned[i][j] = 0.0f;
+
+    handler->is_origin_set = false;
+
+    handler->origin = (ned_ecef_coords_t){
+        .x = 0.0,
+        .y = 0.0,
+        .z = 0.0,
+        .n = 0.0,
+        .e = 0.0,
+        .d = 0.0,
+    };
+
+    return handler;
 }

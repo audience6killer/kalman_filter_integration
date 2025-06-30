@@ -162,10 +162,11 @@ void neo_m8n_data_loop(void)
 
         if (g_neo_m8n.location.isUpdated())
         {
-            if(g_gps_state != NEO_M8N_STATE_STARTED)
-            {
-                neo_m8n_set_state(NEO_M8N_STATE_STARTED);
-            }
+            // if(g_gps_state != NEO_M8N_STATE_STARTED)
+            // {
+            //     neo_m8n_set_state(NEO_M8N_STATE_STARTED);
+            // }
+            neo_m8n_set_state(NEO_M8N_STATE_STARTED);
 
             gps_coords_t coord = {
                 .lat = g_neo_m8n.location.lat(),
